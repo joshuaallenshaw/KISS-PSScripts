@@ -159,6 +159,10 @@
 					$commandResult = Invoke-Command -Session $session -ScriptBlock $scriptBlock
 					Remove-PSSession -Session $session
 				}
+				else
+				{
+					Write-Verbose "No Data Collected"
+				}
 			}
 			#Special Handling for localhost
 			else
@@ -191,13 +195,13 @@
 				$rebootResultCollection = $rebootResultCollection | Where-Object {$_.WURebootRequired -eq $true}
 			}
 
-			if($PassThru)
-			{
-				return $rebootResultCollection
-			}
-			elseif($PassThru -and $localOnly)
+			if($PassThru -and $localOnly)
 			{
 				return $rebootResultCollection | Select-Object -Property * -ExcludeProperty ComputerName
+			}
+			elseif($PassThru)
+			{
+				return $rebootResultCollection
 			}
 			elseif($localOnly)
 			{
