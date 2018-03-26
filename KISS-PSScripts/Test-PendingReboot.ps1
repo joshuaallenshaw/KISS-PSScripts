@@ -45,9 +45,6 @@
 		String[]
 			You can pipe computernames to this function.
 
-		PSCredential
-			You can pipe credentials to this function.
-
 	.OUTPUTS
 		Bool
 			Run on local host returns bool by default.
@@ -70,10 +67,9 @@
 
 	Param (
 		[parameter(ValueFromPipeLineByPropertyName = $true)]
-		[Alias('IPAddress','__Server','CN')]
+		[Alias('MachineName','IPAddress','__Server','CN', 'Name')]
 		[string[]]
 		$ComputerName = @($env:COMPUTERNAME),
-		[parameter(ValueFromPipeLineByPropertyName = $true)]
 		[System.Management.Automation.PSCredential]
 		[System.Management.Automation.Credential()]
 		$Credential = [System.Management.Automation.PSCredential]::Empty,
@@ -87,9 +83,7 @@
 	{
 		[PSCustomObject[]]$rebootResultCollection = @()
 		$localHost = [System.Net.Dns]::GetHostByName(($env:computerName)).HostName
-		[bool]$localOnly = ($ComputerName.Count -eq 1 -and [System.Net.Dns]::Resolve(($ComputerName[0])).HostName -eq $localHost)
-
-		#Put the working code in a reusable scriptblock
+		# Put the working code in a reusable scriptblock
 		[ScriptBlock] $scriptBlock = {
 			$result = @{
 				CBSRebootPending = $false
@@ -97,14 +91,18 @@
 				SCCMRebootPending = $false
 				WURebootRequired = $false
 			}
-			#Check CBS Registry
+			# Check CBS Registry
 			$cbsKey = Get-ChildItem "HKLM:Software\Microsoft\Windows\CurrentVersion\Component Based Servicing\RebootPending" -ErrorAction Ignore
 			if ($cbsKey -ne $null)
 			{
 				$result.CBSRebootPending = $true
 			}
+            else
+            {
+                Write-Verbose "No CBS repairs found."
+            }
 
-			#Check PendingFileRenameOperations
+			# Check PendingFileRenameOperations
 			$pendProp = Get-ItemProperty "HKLM:SYSTEM\CurrentControlSet\Control\Session Manager" -Name "PendingFileRenameOperations" -ErrorAction Ignore
 			if($pendProp -ne $null)
 			{
@@ -115,7 +113,7 @@
 				Write-Verbose "No Pending File Renames found."
 			}
 
-			#Check SCCM Client <http://gallery.technet.microsoft.com/scriptcenter/Get-PendingReboot-Query-bdb79542/view/Discussions#content>
+			# Check SCCM Client <http://gallery.technet.microsoft.com/scriptcenter/Get-PendingReboot-Query-bdb79542/view/Discussions#content>
 			try
 			{
 				$sccmStatus = ([wmiclass]"\\.\root\ccm\clientsdk:CCM_ClientUtilities").DetermineIfRebootPending()
@@ -129,12 +127,17 @@
 			{
 				$result.SCCMRebootPending = $true
 			}
-			#Check Windows Update
+			# Check Windows Update
 			$wuKey = Get-Item "HKLM:SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update\RebootRequired" -ErrorAction Ignore
 			if($wuKey -ne $null)
 			{
 				$result.WURebootRequired = $true
 			}
+            else
+			{
+				Write-Verbose "No WU required reboots found."
+			}
+
 			return $result
 		}
 	}
@@ -143,9 +146,11 @@
 	{
 		foreach($name in $ComputerName)
 		{
+			$commandResult = $null
 			try
 			{
 				$resolvedName = [System.Net.Dns]::Resolve(($name)).HostName
+                Write-Verbose ("{0} resolved to {1}" -f $name, $resolvedName)
 			}
 			catch
 			{
@@ -153,54 +158,84 @@
 			}
 			if($resolvedName -ne $localHost -and $Credential -ne [System.Management.Automation.PSCredential]::Empty -and [bool](([System.Security.Principal.WindowsIdentity]::GetCurrent()).groups -match "S-1-5-32-544"))
 			{
-				#Attempt PSSession
+				# Attempt remote execution
+				Write-Verbose "Attempting remote connection."
 				try
 				{
-					$session = New-PSSession -ComputerName $resolvedName -Credential $Credential -ErrorAction Stop
+					$commandResult = Invoke-Command -Session $session -ComputerName $resolvedName -ScriptBlock $scriptBlock -Credential $Credential -ErrorAction Stop
 				}
 				catch
 				{
 					Write-Verbose $_.Exception.Message
-				}
-				if($session -ne $null)
-				{
-					$commandResult = Invoke-Command -Session $session -ScriptBlock $scriptBlock
-					Remove-PSSession -Session $session
-				}
-				else
-				{
 					Write-Verbose "No Data Collected"
 				}
 			}
-			#Special Handling for localhost
+			# Using Local Credentials
 			else
 			{
-				if($Credential -ne [System.Management.Automation.PSCredential]::Empty -and $resolvedName -eq $localHost -and !([bool](([System.Security.Principal.WindowsIdentity]::GetCurrent()).groups -match "S-1-5-32-544")))
+				Write-Verbose "Connecting using local session."
+				# Special Handling for localhost.
+				if($resolvedName -eq $localHost -and !([bool](([System.Security.Principal.WindowsIdentity]::GetCurrent()).groups -match "S-1-5-32-544")))
 				{
-					Write-Verbose "Session is not run as administrator.  Provided credentials will be ignored for localhost."
+					if($Credential -ne [System.Management.Automation.PSCredential]::Empty)
+					{
+						Write-Verbose "Session is not run as administrator.  Provided credentials will be ignored for localhost."
+					}
+					try
+					{
+						$commandResult = Invoke-Command -ScriptBlock $scriptBlock -ErrorAction Stop
+					}
+					catch
+					{
+						Write-Verbose $_.Exception.Message
+					}
 				}
-				$commandResult = Invoke-Command -ScriptBlock $scriptBlock
+				else
+				{
+					try
+					{
+						$commandResult = Invoke-Command -ScriptBlock $scriptBlock -ComputerName $resolvedName -ErrorAction Stop
+					}
+					catch
+					{
+						Write-Verbose $_.Exception.Message
+					}
+				}
 			}
-			#Process the results
-			$rebootResult = [ordered]@{
+			# Process the results
+			if($commandResult -ne $null)
+			{
+				$rebootResult = [ordered]@{
 					ComputerName = $resolvedName
 					CBSRebootPending = $commandResult.CBSRebootPending
 					FileRenamePending = $commandResult.FileRenamePending
 					SCCMRebootPending = $commandResult.SCCMRebootPending
 					WURebootRequired = $commandResult.WURebootRequired
+				}
+				$rebootResultCollection += New-Object  PSCustomObject -Property $rebootResult
 			}
-			$rebootResultCollection += New-Object  PSCustomObject -Property $rebootResult
 		}
 	}
 
-	#Output the Results
+	# Output the Results
 	end
 	{
 		if($rebootResultCollection -ne $null)
 		{
-			if($requiredOnly)
+			$colCount = $rebootResultCollection.Count
+            Write-Verbose "$colCount results returned."
+            [bool]$localOnly = ($colCount -eq 1 -and [System.Net.Dns]::Resolve(($rebootResultCollection[0].ComputerName)).HostName -eq $localHost)
+            if($localOnly)
+            {
+                Write-Verbose "Returning results in Local Only format."
+            }
+
+            if($requiredOnly)
 			{
 				$rebootResultCollection = $rebootResultCollection | Where-Object {$_.WURebootRequired -eq $true}
+                $curCount = $rebootResultCollection.Count
+
+                Write-Verbose "$($colCount - $curCount) pending results were filtered out."
 			}
 
 			if($PassThru -and $localOnly)
