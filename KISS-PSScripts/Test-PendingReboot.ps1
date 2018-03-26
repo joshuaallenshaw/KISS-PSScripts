@@ -69,10 +69,11 @@
 	[CmdletBinding(DefaultParameterSetName='All')]
 
 	Param (
-		[parameter(ValueFromPipeline = $true, ValueFromPipeLineByPropertyName = $true)]
+		[parameter(ValueFromPipeLineByPropertyName = $true)]
+		[Alias('IPAddress','__Server','CN')]
 		[string[]]
 		$ComputerName = @($env:COMPUTERNAME),
-		[parameter(ValueFromPipeline = $true, ValueFromPipeLineByPropertyName = $true)]
+		[parameter(ValueFromPipeLineByPropertyName = $true)]
 		[System.Management.Automation.PSCredential]
 		[System.Management.Automation.Credential()]
 		$Credential = [System.Management.Automation.PSCredential]::Empty,
@@ -142,7 +143,14 @@
 	{
 		foreach($name in $ComputerName)
 		{
-			$resolvedName = [System.Net.Dns]::Resolve(($name)).HostName
+			try
+			{
+				$resolvedName = [System.Net.Dns]::Resolve(($name)).HostName
+			}
+			catch
+			{
+				Write-Verbose $_.Exception.Message
+			}
 			if($resolvedName -ne $localHost -and $Credential -ne [System.Management.Automation.PSCredential]::Empty -and [bool](([System.Security.Principal.WindowsIdentity]::GetCurrent()).groups -match "S-1-5-32-544"))
 			{
 				#Attempt PSSession
