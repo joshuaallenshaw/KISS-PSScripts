@@ -20,3 +20,5 @@ Function-Name -FunctionParameters #Executes the function
 ## Directory
 
 * **Test-PendingReboot** - Used to determine is a machine has changes pending a reboot or changes requiring a reboot.  Pipeline input and output supported.
+
+* **Clean-Disk** - Used to free space by removing temporary, outdated, and junk files.
