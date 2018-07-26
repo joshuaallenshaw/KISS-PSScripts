@@ -623,12 +623,12 @@
 			# Remove junk folders from windows directory.
 			Write-Verbose "Removing Junk Folders from the Windows directory."
 			Get-ChildItem $env:SystemRoot -Force -Directory -ea SilentlyContinue | Where-Object {
-				($_.Name -match "^\{\w{8}-\w{4}\w{4}-\w{4}-\w{12}$") -and ($_.Name -notmatch "win|prog|res|rec|driv") -and ($_.LastWriteTime -lt $retentionDate)
+				($_.Name -match "^\{\w{8}-\w{4}-\w{4}-\w{4}-\w{12}\}$") -and ($_.Name -notmatch "win|prog|res|rec|driv") -and ($_.LastWriteTime -lt $retentionDate)
 			} | Where-Object {
 				$PSCmdlet.ShouldProcess("$($_.FullName)", 'Remove File/Folder') -and ($_.FullName -ne $null)
 			} | Remove-SystemFiles
 
-			# Remove junk folders from windows directory.
+			# Remove junk folders from root directory.
 			Write-Verbose "Removing Junk Folders from the Root directory."
 			Get-ChildItem $env:SystemDrive -Force -Directory -ea SilentlyContinue | Where-Object {
 				($_.Name -notmatch "win|prog|res|rec|driv") -and ($_.Name -match "^[a-z0-9]{15,}$") -and ((("$($_.Name)" -replace '[0-9]','').Length *.9 ) -lt ("$($_.Name)" -replace '[^0-9]','').Length) -and ($_.LastWriteTime -lt $retentionDate)
@@ -636,7 +636,7 @@
 				$PSCmdlet.ShouldProcess("$($_.FullName)", 'Remove File/Folder') -and ($_.FullName -ne $null)
 			} | Remove-SystemFiles
 		}
-		elseif (($EmptyWinTemp -or $TheWorks) -and $Mode -eq 'User')
+		elseif (($RemoveJunkFolders -or $TheWorks) -and $Mode -eq 'User')
 		{
 			Write-Verbose "-RemoveJunkFolders requires 'System' Mode."
 		}
