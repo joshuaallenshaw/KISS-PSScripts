@@ -648,7 +648,7 @@
 				$PSCmdlet.ShouldProcess("$($_.FullName)", 'Remove File')
 			} | Remove-Item -Verbose:$VerbosePreference -Recurse -Force -Confirm:$false -ea SilentlyContinue }
 
-		if ($DiskCleanTool)
+		if ($DiskCleanTool -and (Get-Command cleanmgr -EA SilentlyContinue))
 		{
 			# Running Disk Clean up Tool
 			Write-Verbose "Running Windows disk Clean up Tool with SageSet $DiskCleanTool ..."

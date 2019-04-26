@@ -27,8 +27,13 @@
   </PropertyGroup>
   <ItemGroup />
   <ItemGroup>
+    <Compile Include="check_replication.ps1" />
     <Compile Include="Clean-Disk.ps1" />
+    <Compile Include="Clean-IISLogs.ps1" />
+    <Compile Include="Clean-ShadowProtectFiles.ps1" />
+    <Compile Include="fix_replication.ps1" />
     <Compile Include="Test-PendingReboot.ps1" />
+    <Compile Include="VirusAnnoyance.ps1" />
   </ItemGroup>
   <Import Project="$(MSBuildBinPath)\Microsoft.CSharp.targets" />
   <Target Name="Build" />
